@@ -8,6 +8,9 @@ using System.Collections.Generic;
 // -------------------------------------------------------------------------
 public class GameSceneManager : MonoBehaviour 
 {
+	// Inspector Assigned Variables
+	[SerializeField]	private ParticleSystem	_bloodParticles	=	null;
+
 	// Statics
 	private static GameSceneManager	_instance	=	null;
 	public static GameSceneManager	instance
@@ -22,6 +25,9 @@ public class GameSceneManager : MonoBehaviour
 	
 	// Private
 	private Dictionary< int, AIStateMachine>		_stateMachines	=	new Dictionary<int, AIStateMachine>();
+
+	// Properties
+	public ParticleSystem	bloodParticles{ get{ return _bloodParticles;}}
 
 	// Public Methods
 	// --------------------------------------------------------------------
