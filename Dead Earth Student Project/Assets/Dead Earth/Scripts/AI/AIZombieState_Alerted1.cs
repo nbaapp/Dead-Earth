@@ -84,7 +84,8 @@ public class AIZombieState_Alerted1 : AIZombieState
 		}	
 
 		if (_zombieStateMachine.AudioThreat.type==AITargetType.None && 
-			_zombieStateMachine.VisualThreat.type==AITargetType.Visual_Food)
+			_zombieStateMachine.VisualThreat.type==AITargetType.Visual_Food &&
+			_zombieStateMachine.targetType==AITargetType.None)
 		{
 			_zombieStateMachine.SetTarget ( _stateMachine.VisualThreat );
 			return AIStateType.Pursuit;
@@ -92,45 +93,44 @@ public class AIZombieState_Alerted1 : AIZombieState
 
 		float angle;
 
-		if ( (_zombieStateMachine.targetType==AITargetType.Audio || _zombieStateMachine.targetType==AITargetType.Visual_Light) && !_zombieStateMachine.isTargetReached)
-		{
-			angle = AIState.FindSignedAngle(_zombieStateMachine.transform.forward, 
-											_zombieStateMachine.targetPosition- _zombieStateMachine.transform.position);
+		if ((_zombieStateMachine.targetType == AITargetType.Audio || _zombieStateMachine.targetType == AITargetType.Visual_Light) && !_zombieStateMachine.isTargetReached) {
+			angle = AIState.FindSignedAngle (_zombieStateMachine.transform.forward, 
+				_zombieStateMachine.targetPosition - _zombieStateMachine.transform.position);
 			
-			if (_zombieStateMachine.targetType==AITargetType.Audio && Mathf.Abs (angle) < _threatAngleThreshold)
-			{
+			if (_zombieStateMachine.targetType == AITargetType.Audio && Mathf.Abs (angle) < _threatAngleThreshold) {
 				return AIStateType.Pursuit;
 			}
 
-			if (_directionChangeTimer > _directionChangeTime) 
-			{
-				if (Random.value < _zombieStateMachine.intelligence) 
-				{
+			if (_directionChangeTimer > _directionChangeTime) {
+				if (Random.value < _zombieStateMachine.intelligence) {
 					_zombieStateMachine.seeking = (int)Mathf.Sign (angle);
-				} 
-				else 
-				{
+				} else {
 					_zombieStateMachine.seeking = (int)Mathf.Sign (Random.Range (-1.0f, 1.0f));
 				}
 
 				_directionChangeTimer = 0.0f;
 			}
-		}
+		} else if (_zombieStateMachine.targetType == AITargetType.Waypoint && !_zombieStateMachine.navAgent.pathPending) {
+			angle = AIState.FindSignedAngle (_zombieStateMachine.transform.forward, 
+				_zombieStateMachine.navAgent.steeringTarget - _zombieStateMachine.transform.position);
 
-		else
-		
-		if (_zombieStateMachine.targetType==AITargetType.Waypoint && !_zombieStateMachine.navAgent.pathPending)
-		{
-			angle = AIState.FindSignedAngle(_zombieStateMachine.transform.forward, 
-											_zombieStateMachine.navAgent.steeringTarget- _zombieStateMachine.transform.position);
-
-			if (Mathf.Abs (angle) < _waypointAngleThreshold) return AIStateType.Patrol;
+			if (Mathf.Abs (angle) < _waypointAngleThreshold)
+				return AIStateType.Patrol;
 			if (_directionChangeTimer > _directionChangeTime) 
 			{
 				_zombieStateMachine.seeking = (int)Mathf.Sign (angle);
 				_directionChangeTimer = 0.0f;
 			}
 		}
+		else 
+		{
+			if (_directionChangeTimer > _directionChangeTime) 
+			{
+				_zombieStateMachine.seeking = (int)Mathf.Sign (Random.Range (-1.0f, 1.0f));
+				_directionChangeTimer = 0.0f;
+			}
+		}
+
 
 		return AIStateType.Alerted;
 	}
