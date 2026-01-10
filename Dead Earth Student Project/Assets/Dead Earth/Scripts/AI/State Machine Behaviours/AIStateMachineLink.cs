@@ -1,6 +1,8 @@
 ﻿using UnityEngine;
 using System.Collections;
 
+public enum ComChannelName { ComChannel1, ComChannel2, ComChannel3, ComChannel4};
+
 // ----------------------------------------------------------------------
 // Class	:	AIStateMachineLink
 // Desc		:	Should be used as the base class for any

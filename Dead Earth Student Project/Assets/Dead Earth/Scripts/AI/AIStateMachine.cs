@@ -7,6 +7,7 @@ using System.Collections.Generic;
 public enum AIStateType 		{ None, Idle, Alerted, Patrol, Attack, Feeding, Pursuit, Dead }
 public enum AITargetType		{ None, Waypoint, Visual_Player, Visual_Light, Visual_Food, Audio }
 public enum AITriggerEventType	{ Enter, Stay, Exit }
+public enum AIBoneAlignmentType { XAxis, YAxis, ZAxis, XAxisInverted, YAxisInverted, ZAxisInverted }
 
 // ----------------------------------------------------------------------
 // Class	:	AITarget
@@ -56,21 +57,32 @@ public abstract class AIStateMachine : MonoBehaviour
 	public AITarget		AudioThreat		=	new AITarget();
 
 	// Protected
-	protected AIState	_currentState						=	null;
-	protected Dictionary< AIStateType, AIState > _states	=	new Dictionary< AIStateType, AIState>();
-	protected AITarget	_target								=	new AITarget();
-	protected int		_rootPositionRefCount				=	0;
-	protected int		_rootRotationRefCount				=	0;
-	protected bool		_isTargetReached					=   false;
+	protected AIState			_currentState						=	null;
+	protected Dictionary< AIStateType, AIState > _states			=	new Dictionary< AIStateType, AIState>();
+	protected AITarget			_target								=	new AITarget();
+	protected int				_rootPositionRefCount				=	0;
+	protected int				_rootRotationRefCount				=	0;
+	protected bool				_isTargetReached					=   false;
+	protected List<Rigidbody>	_bodyParts							=   new List<Rigidbody>();
+	protected int				_aiBodyPartLayer					= 	-1;
+
+	// Animation Layer Manager
+	protected Dictionary<string, bool>	_animLayersActive			= new Dictionary<string, bool>();
 
 	// Protected Inspector Assigned
-	[SerializeField]	protected AIStateType		_currentStateType	=	AIStateType.Idle;
-	[SerializeField]	protected SphereCollider	_targetTrigger		=	null;
-	[SerializeField]	protected SphereCollider	_sensorTrigger		=	null;
-	[SerializeField] 	protected AIWaypointNetwork _waypointNetwork 	= null;
-	[SerializeField] 	protected bool			    _randomPatrol		= false;
-	[SerializeField] 	protected int			    _currentWaypoint 	= -1;
-	[SerializeField]	[Range(0,15)]	protected float		_stoppingDistance	=	1.0f;
+	[SerializeField]	protected AIStateType			_currentStateType	=	AIStateType.Idle;
+	[SerializeField]	protected Transform				_rootBone			= 	null;
+	[SerializeField]	protected AIBoneAlignmentType   _rootBoneAlignment  =   AIBoneAlignmentType.ZAxis;
+	[SerializeField]	protected SphereCollider		_targetTrigger		=	null;
+	[SerializeField]	protected SphereCollider		_sensorTrigger		=	null;
+	[SerializeField] 	protected AIWaypointNetwork		_waypointNetwork 	= 	null;
+	[SerializeField] 	protected bool			    	_randomPatrol		= 	false;
+	[SerializeField] 	protected int			   	 	_currentWaypoint 	= 	-1;
+	[SerializeField]	
+	[Range(0,15)]		protected float					_stoppingDistance	=	1.0f;
+
+	// Layered Audio Control
+	protected ILayeredAudioSource						_layeredAudioSource	=	null;
 
 	// Component Cache
 	protected Animator		_animator		=	null;
@@ -123,6 +135,41 @@ public abstract class AIStateMachine : MonoBehaviour
 		}
 	}
 
+	public void SetLayerActive (string layerName, bool active )
+	{
+		 _animLayersActive[layerName] = active;
+		if (active==false && _layeredAudioSource!=null)
+		 	_layeredAudioSource.Stop( _animator.GetLayerIndex(layerName) );
+	} 
+
+	public bool IsLayerActive( string layerName ) 
+	{
+		bool result;
+		if (_animLayersActive.TryGetValue(layerName, out result)) 
+		{
+			return result;
+		}
+		return false;
+	}
+
+	public bool PlayAudio(AudioCollection clipPool, int bank, int layer, bool looping=true )
+	{
+		if (_layeredAudioSource==null) return false;
+		return _layeredAudioSource.Play( clipPool, bank, layer, looping );
+	}
+
+	public void StopAudio( int layer )
+	{
+		if (_layeredAudioSource!=null)
+			_layeredAudioSource.Stop( layer );
+	}
+
+	public void MuteAudio( bool mute )
+	{
+		if (_layeredAudioSource!=null)
+			_layeredAudioSource.Mute( mute );
+	}
+
 	// -----------------------------------------------------------------
 	// Name	:	Awake
 	// Desc	:	Cache Components
@@ -135,6 +182,12 @@ public abstract class AIStateMachine : MonoBehaviour
 		_navAgent	=	GetComponent<NavMeshAgent>();
 		_collider	=	GetComponent<Collider>();
 
+		// Cache Audio Source Reference for Layered AI Audio
+		AudioSource	audioSource = 	GetComponent<AudioSource>();
+
+		// Get BodyPart Layer
+		_aiBodyPartLayer  = LayerMask.NameToLayer("AI Body Part");
+
 		// Do we have a valid Game Scene Manager
 		if (GameSceneManager.instance!=null)
 		{
@@ -143,6 +196,25 @@ public abstract class AIStateMachine : MonoBehaviour
 			if (_sensorTrigger)		GameSceneManager.instance.RegisterAIStateMachine( _sensorTrigger.GetInstanceID(), this );
 		}
 
+		if (_rootBone!=null)
+		{
+			Rigidbody[] bodies = _rootBone.GetComponentsInChildren<Rigidbody>();
+
+			foreach( Rigidbody bodyPart in bodies )
+			{
+				if (bodyPart!=null && bodyPart.gameObject.layer == _aiBodyPartLayer)
+				{
+					_bodyParts.Add( bodyPart );
+					GameSceneManager.instance.RegisterAIStateMachine( bodyPart.GetInstanceID(), this );
+				}
+			}
+		}
+
+		// Register the Layered Audio Source
+		if (_animator && audioSource && AudioManager.instance)
+		{
+			_layeredAudioSource =  AudioManager.instance.RegisterLayeredAudioSource(audioSource, _animator.layerCount );
+		}
 	}
 
 	// -----------------------------------------------------------------
@@ -201,6 +273,24 @@ public abstract class AIStateMachine : MonoBehaviour
 		}
 	}
 
+	// ------------------------------------------------------------------------------
+	// Name	:	SetStateOverride
+	// Desc	:	This method allows any external method to force the AI out of its
+	//			current state and into the state specified
+	// ------------------------------------------------------------------------------
+	public void SetStateOverride ( AIStateType state )
+	{
+		// Set the current state
+		if ( state!= _currentStateType && _states.ContainsKey( state ))
+		{
+			if (_currentState!=null)
+				 _currentState.OnExitState();
+
+			_currentState = _states[state];
+			_currentStateType = state;
+			_currentState.OnEnterState();
+		}
+	} 
 
 	// -----------------------------------------------------------------------------
 	// Name	:	GetWaypointPosition
@@ -358,6 +448,8 @@ public abstract class AIStateMachine : MonoBehaviour
 	// -------------------------------------------------------------------
 	protected virtual void Update()
 	{
+		//Debug.Log("Root Position Ref Count "+_rootPositionRefCount);
+
 		if (_currentState==null) return;
 
 		AIStateType newStateType = _currentState.OnUpdate();
@@ -482,5 +574,29 @@ public abstract class AIStateMachine : MonoBehaviour
 	{
 		_rootPositionRefCount+= rootPosition;
 		_rootRotationRefCount+= rootRotation;
+
+		//Debug.Log("Adding Root Motion Request "+rootPosition+"   and    "+rootRotation);
+	}
+
+
+	public virtual void TakeDamage( Vector3 position, Vector3 force, int damage, Rigidbody bodyPart, CharacterManager characterManager, int hitDirection=0 )
+	{
+		
+	}
+
+	// -----------------------------------------------------------
+	// Name	:	OnDestory
+	// Desc	:	We must remember to unregister our audio sources
+	//			when we are destroyed as the AudioManager
+	//			is a multi-scene object. Otherwise it
+	//			will still try to update audio layers
+	//			to audio sources which have been destroyed
+	// ------------------------------------------------------------
+	protected virtual void OnDestroy()
+	{
+		if (_layeredAudioSource!=null && AudioManager.instance)
+		{
+			AudioManager.instance.UnregisterLayeredAudioSource( _layeredAudioSource );
+		}
 	}
 }

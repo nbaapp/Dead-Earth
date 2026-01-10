@@ -30,7 +30,7 @@ public class AIZombieState_Pursuit1 : AIZombieState
 	// Default Handlers
 	public override void 		OnEnterState()
 	{
-		Debug.Log ("Entering Pursuit State");
+
 
 		base.OnEnterState ();
 		if (_zombieStateMachine == null)

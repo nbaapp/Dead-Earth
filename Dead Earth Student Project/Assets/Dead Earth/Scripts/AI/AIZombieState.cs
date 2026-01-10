@@ -61,7 +61,7 @@ public abstract class AIZombieState : AIState
 		// If we don't have a parent state machine then bail
 		if (_zombieStateMachine == null)
 			return;
-
+	
 		// We are not interested in exit events so only step in and process if its an
 		// enter or stay.
 		if (eventType != AITriggerEventType.Exit) 
@@ -90,6 +90,7 @@ public abstract class AIZombieState : AIState
 			else 
 			if (other.CompareTag ("Flash Light") && curType != AITargetType.Visual_Player) 
 			{
+
 				BoxCollider flashLightTrigger = (BoxCollider)other;
 				float distanceToThreat = Vector3.Distance (_zombieStateMachine.sensorPosition, flashLightTrigger.transform.position);
 				float zSize = flashLightTrigger.size.z * flashLightTrigger.transform.lossyScale.z;

@@ -9,6 +9,7 @@ public enum  CurveControlledBobCallbackType { Horizontal, Vertical }
 // Delegates
 public delegate void CurveControlledBobCallback ();
 
+
 [System.Serializable]
 public class CurveControlledBobEvent
 {
@@ -113,19 +114,22 @@ public class CurveControlledBob
 [RequireComponent(typeof(CharacterController))]
 public class FPSController : MonoBehaviour 
 {
-	public List<AudioSource> AudioSources = new List<AudioSource>();
-	private int _audioToUse = 0;
+	[SerializeField] private AudioCollection	_footsteps=	null;
+	[SerializeField] private float				_crouchAttenuation	=	0.2f;
 
 	// Inspector Assigned Locomotion Settings
 	[SerializeField] private float 	_walkSpeed			= 2.0f;
 	[SerializeField] private float 	_runSpeed			= 4.5f;
 	[SerializeField] private float 	_jumpSpeed			= 7.5f;
 	[SerializeField] private float	_crouchSpeed		= 1.0f;
+	[SerializeField] private float	_staminaDepletion	= 5.0f;
+	[SerializeField] private float	_staminaRecovery	= 10; 
 	[SerializeField] private float 	_stickToGroundForce = 5.0f;
 	[SerializeField] private float 	_gravityMultiplier	= 2.5f;
 	[SerializeField] private float  _runStepLengthen	= 0.75f;
 	[SerializeField] private CurveControlledBob _headBob= new CurveControlledBob();
 	[SerializeField] private GameObject _flashLight 	= null;
+	[SerializeField] private bool _flashlightOnAtStart	= true;
 
 	// Use Standard Assets Mouse Look class for mouse input -> Camera Look Control
 	[SerializeField] private UnityStandardAssets.Characters.FirstPerson.MouseLook _mouseLook = new UnityStandardAssets.Characters.FirstPerson.MouseLook();
@@ -141,6 +145,8 @@ public class FPSController : MonoBehaviour
 	private bool		_isCrouching					= false;
 	private Vector3		_localSpaceCameraPos			= Vector3.zero;
 	private float		_controllerHeight				= 0.0f;
+	private float		_stamina						= 100;
+	private bool		_freezeMovement					= false;
 
 	// Timers
 	private float 		_fallingTimer 					= 0.0f;
@@ -153,6 +159,37 @@ public class FPSController : MonoBehaviour
 	public float walkSpeed	 				{ get{ return _walkSpeed;}}
 	public float runSpeed  					{ get{ return _runSpeed;}}
 
+	float _dragMultiplier 		= 1.0f;
+	float _dragMultiplierLimit 	= 1.0f;
+	[SerializeField] [Range(0.0f, 1.0f)] float _npcStickiness = 0.5f; 
+
+	public float dragMultiplierLimit
+	{
+		get{ return _dragMultiplierLimit;}
+		set{ _dragMultiplierLimit = Mathf.Clamp01( value );}
+	}
+
+	public float dragMultiplier
+	{
+		get{ return _dragMultiplier;}
+		set{ _dragMultiplier = Mathf.Min( value, _dragMultiplierLimit ); }
+	}
+
+	public CharacterController characterController
+	{
+		get{ return _characterController;}
+	}
+
+	public bool freezeMovement
+	{
+		get{ return _freezeMovement;}
+		set{ _freezeMovement = value;}
+	}
+
+	public float stamina
+	{
+		get{ return _stamina;}
+	}
 
 	protected void Start()
 	{
@@ -178,7 +215,7 @@ public class FPSController : MonoBehaviour
 		_headBob.RegisterEventCallback (1.5f, PlayFootStepSound, CurveControlledBobCallbackType.Vertical); 
 
 		if (_flashLight)
-			_flashLight.SetActive (false);
+			_flashLight.SetActive (_flashlightOnAtStart);
 	}
 
 	protected void Update()
@@ -237,7 +274,14 @@ public class FPSController : MonoBehaviour
 	
 		_previouslyGrounded = _characterController.isGrounded;
 
-			       
+		// Calculate Stamina
+		if (_movementStatus == PlayerMoveStatus.Running)
+			_stamina = Mathf.Max( _stamina - _staminaDepletion * Time.deltaTime, 0.0f );	
+		else
+			_stamina = Mathf.Min( _stamina + _staminaRecovery * Time.deltaTime, 100.0f );	
+
+
+		_dragMultiplier = Mathf.Min( _dragMultiplier + Time.deltaTime, _dragMultiplierLimit );	
 	}
 
 	protected void FixedUpdate()
@@ -245,11 +289,11 @@ public class FPSController : MonoBehaviour
 		// Read input from axis
 		float horizontal	= Input.GetAxis("Horizontal");
 		float vertical 		= Input.GetAxis("Vertical");
-		bool  waswalking	= _isWalking;
+
 		_isWalking 			= !Input.GetKey(KeyCode.LeftShift);
 
 		// Set the desired speed to be either our walking speed or our running speed
-		float speed = _isCrouching ? _crouchSpeed :_isWalking ? _walkSpeed : _runSpeed;
+		float speed = _isCrouching ? _crouchSpeed :_isWalking ? _walkSpeed : Mathf.Lerp(_walkSpeed , _runSpeed, _stamina/100.0f);;
 		_inputVector = new Vector2(horizontal, vertical);
 
 		// normalize input if it exceeds 1 in combined length:
@@ -264,8 +308,8 @@ public class FPSController : MonoBehaviour
 			desiredMove = Vector3.ProjectOnPlane(desiredMove, hitInfo.normal).normalized;
 
 		// Scale movement by our current speed (walking value or running value)
-		_moveDirection.x = desiredMove.x*speed;
-		_moveDirection.z = desiredMove.z*speed;
+		_moveDirection.x = !_freezeMovement ? desiredMove.x*speed*_dragMultiplier : 0.0f;
+		_moveDirection.z = !_freezeMovement ? desiredMove.z*speed*_dragMultiplier : 0.0f;
 
 		// If grounded
 		if (_characterController.isGrounded)
@@ -303,10 +347,27 @@ public class FPSController : MonoBehaviour
 
 	void PlayFootStepSound()
 	{
-		if (_isCrouching)
-			return;
-		
-		AudioSources [_audioToUse].Play ();
-		_audioToUse = (_audioToUse == 0) ? 1 : 0;
+		if (AudioManager.instance!=null && _footsteps!=null)
+		{
+			AudioClip soundToPlay;
+			if (_isCrouching)
+				soundToPlay = _footsteps [1];
+			else
+				soundToPlay = _footsteps[0];
+
+			AudioManager.instance.PlayOneShotSound("Player", 
+													soundToPlay, 
+													transform.position, 
+													_isCrouching?_footsteps.volume*_crouchAttenuation :_footsteps.volume, 
+													_footsteps.spatialBlend, 
+													_footsteps.priority );
+		}
 	}
+
+
+	public void DoStickiness()
+	{
+		_dragMultiplier = 1.0f-_npcStickiness;	
+	}
+
 }

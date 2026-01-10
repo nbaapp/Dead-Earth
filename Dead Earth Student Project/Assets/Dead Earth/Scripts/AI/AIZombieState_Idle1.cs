@@ -31,7 +31,6 @@ public class AIZombieState_Idle1 : AIZombieState
 	// ------------------------------------------------------------------
 	public override void		OnEnterState()			
 	{
-		Debug.Log ("Entering Idle State");
 		base.OnEnterState ();
 		if (_zombieStateMachine == null)
 			return;
@@ -94,7 +93,7 @@ public class AIZombieState_Idle1 : AIZombieState
 		if (_timer > _idleTime) 
 		{
 			_zombieStateMachine.navAgent.SetDestination(_zombieStateMachine.GetWaypointPosition (false));
-			_zombieStateMachine.navAgent.isStopped = false;
+			_zombieStateMachine.navAgent.isStopped  = true;
 			return AIStateType.Alerted;
 		}
 

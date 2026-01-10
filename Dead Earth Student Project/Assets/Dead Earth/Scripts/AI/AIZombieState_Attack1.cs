@@ -20,7 +20,7 @@ public class AIZombieState_Attack1 :  AIZombieState
 	// Default Handlers
 	public override void 		OnEnterState()
 	{
-		Debug.Log ("Entering Attack State");
+
 
 		base.OnEnterState ();
 		if (_zombieStateMachine == null)

@@ -6,11 +6,16 @@ public class AIDamageTrigger : MonoBehaviour
 	// Inspector Variables
 	[SerializeField] string			_parameter = "";
 	[SerializeField] int			_bloodParticlesBurstAmount	=	10;
+	[SerializeField] float			_damageAmount				=	0.1f;
+	[SerializeField] bool			_doDamageSound				=	true;
+	[SerializeField] bool			_doPainSound				=	true;
 
 	// Private Variables
-	AIStateMachine  _stateMachine = null;
-	Animator	    _animator	 = null;
-	int			    _parameterHash= -1;
+	AIStateMachine  	_stateMachine 		= null;
+	Animator	   	 	_animator	 		= null;
+	int			    	_parameterHash		= -1;
+	GameSceneManager	_gameSceneManager	= null;
+	private bool		_firstContact		= false;		
 
 	// ------------------------------------------------------------
 	// Name	:	Start
@@ -26,6 +31,17 @@ public class AIDamageTrigger : MonoBehaviour
 
 		// Generate parameter hash for more efficient parameter lookups from the animator
 		_parameterHash = Animator.StringToHash (_parameter); 
+
+		_gameSceneManager = GameSceneManager.instance;
+	}
+
+	void OnTriggerEnter( Collider col )
+	{
+		if (!_animator) 
+			return;
+
+		if (col.gameObject.CompareTag ("Player") && _animator.GetFloat(_parameterHash) >0.9f)
+			 _firstContact = true;
 	}
 
 	// -------------------------------------------------------------
@@ -39,7 +55,7 @@ public class AIDamageTrigger : MonoBehaviour
 		if (!_animator)
 			return;
 
-		// If this is the player object and our parameter is set for damafe
+		// If this is the player object and our parameter is set for damage
 		if (col.gameObject.CompareTag ("Player") && _animator.GetFloat(_parameterHash) >0.9f)
 		{
 			if (GameSceneManager.instance && GameSceneManager.instance.bloodParticles) 
@@ -50,10 +66,21 @@ public class AIDamageTrigger : MonoBehaviour
 				system.transform.position = transform.position;
 				system.transform.rotation = Camera.main.transform.rotation;
 
-				system.simulationSpace = ParticleSystemSimulationSpace.World;
+				var settings = system.main;
+				settings.simulationSpace = ParticleSystemSimulationSpace.World;
 				system.Emit (_bloodParticlesBurstAmount);
 			}
-			Debug.Log ("Player being Damaged ");
+
+			if (_gameSceneManager!=null)
+			{
+				PlayerInfo info = _gameSceneManager.GetPlayerInfo( col.GetInstanceID() );
+				if (info!=null && info.characterManager!=null)
+				{
+					info.characterManager.TakeDamage( _damageAmount, _doDamageSound && _firstContact, _doPainSound );
+				}
+			}
+
+			_firstContact = false;
 		}
 	}
 }

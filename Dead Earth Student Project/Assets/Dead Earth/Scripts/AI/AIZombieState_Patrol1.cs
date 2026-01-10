@@ -30,7 +30,6 @@ public class AIZombieState_Patrol1 : AIZombieState
 	// ------------------------------------------------------------------
 	public override void		OnEnterState()			
 	{
-		Debug.Log ("Entering Patrol State");
 		base.OnEnterState ();
 		if (_zombieStateMachine == null)
 			return;
@@ -46,6 +45,8 @@ public class AIZombieState_Patrol1 : AIZombieState
 
 		// Make sure NavAgent is switched on
 		_zombieStateMachine.navAgent.isStopped = false;
+
+
 	}
 
 
@@ -127,6 +128,7 @@ public class AIZombieState_Patrol1 : AIZombieState
 		{
 			_zombieStateMachine.navAgent.SetDestination(_zombieStateMachine.GetWaypointPosition ( true ));
 		}
+
 
 
 		// Stay in Patrol State
